@@ -16,6 +16,8 @@ from torch.nn import functional as F
 
 from mingpt.utils import CfgNode as CN
 
+from sparselinear import MyLinear, MySparseLinear, MyConnectedSparseLinear, linear_wrapper
+
 # -----------------------------------------------------------------------------
 
 class NewGELU(nn.Module):
@@ -25,6 +27,14 @@ class NewGELU(nn.Module):
     """
     def forward(self, x):
         return 0.5 * x * (1.0 + torch.tanh(math.sqrt(2.0 / math.pi) * (x + 0.044715 * torch.pow(x, 3.0))))
+
+linear_layers = [
+    linear_wrapper(MyLinear, True),
+    linear_wrapper(MySparseLinear, True),
+    linear_wrapper(MyConnectedSparseLinear, True, 2, True)
+]
+
+Linear = linear_layers[1]
 
 class CausalSelfAttention(nn.Module):
     """
@@ -37,9 +47,9 @@ class CausalSelfAttention(nn.Module):
         super().__init__()
         assert config.n_embd % config.n_head == 0
         # key, query, value projections for all heads, but in a batch
-        self.c_attn = nn.Linear(config.n_embd, 3 * config.n_embd)
+        self.c_attn = Linear(config.n_embd, 3 * config.n_embd)
         # output projection
-        self.c_proj = nn.Linear(config.n_embd, config.n_embd)
+        self.c_proj = Linear(config.n_embd, config.n_embd)
         # regularization
         self.attn_dropout = nn.Dropout(config.attn_pdrop)
         self.resid_dropout = nn.Dropout(config.resid_pdrop)
@@ -79,8 +89,8 @@ class Block(nn.Module):
         self.attn = CausalSelfAttention(config)
         self.ln_2 = nn.LayerNorm(config.n_embd)
         self.mlp = nn.ModuleDict(dict(
-            c_fc    = nn.Linear(config.n_embd, 4 * config.n_embd),
-            c_proj  = nn.Linear(4 * config.n_embd, config.n_embd),
+            c_fc    = Linear(config.n_embd, 4 * config.n_embd),
+            c_proj  = Linear(4 * config.n_embd, config.n_embd),
             act     = NewGELU(),
             dropout = nn.Dropout(config.resid_pdrop),
         ))
@@ -223,7 +233,7 @@ class GPT(nn.Module):
         # separate out all parameters to those that will and won't experience regularizing weight decay
         decay = set()
         no_decay = set()
-        whitelist_weight_modules = (torch.nn.Linear, )
+        whitelist_weight_modules = (torch.nn.Linear, MyLinear,)
         blacklist_weight_modules = (torch.nn.LayerNorm, torch.nn.Embedding)
         for mn, m in self.named_modules():
             for pn, p in m.named_parameters():

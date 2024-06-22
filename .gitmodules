@@ -1,0 +1,3 @@
+[submodule "mingpt/SparseLinear"]
+	path = mingpt/SparseLinear
+	url = git@github.com:Yanksi/SparseLinear.git
